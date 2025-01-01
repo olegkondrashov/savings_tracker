@@ -1,34 +1,25 @@
 import React, { useState, useEffect } from "react";
-import "./App.css";
+import "./App.css"
 
 /**
- * We will create exactly 365 circles.
- * Minimum sum = 365 * 5 = 1825.
- * Maximum sum = 365 * 100 = 36500.
- * Each circle can be one of [5, 10, 15, 20, 30, 50, 100].
- */
-
-/**
- * Generate a random distribution of 365 circles that sum exactly to "goal".
- * - Start with all circles = 5.
- * - Distribute leftover (goal - 1825) in increments of 5 among random circles,
- *   up to a maximum of 100 per circle.
- * - This yields a random but valid arrangement if feasible.
+ * Utility to generate exactly 365 circles that sum to the given goal.
+ * - Start all 365 at 5 (minimum).
+ * - Distribute leftover in increments of 5 among random circles until each hits 100 or leftover is 0.
  */
 function generateRandomCirclesForYear(goal) {
   const DAYS = 365;
   const MIN_AMOUNT = 5;
   const MAX_AMOUNT = 100;
 
-  // 1) Initialize all 365 circles to the minimum (5)
+  // Initialize all circles to minimum (5)
   let circles = new Array(DAYS).fill(MIN_AMOUNT);
 
-  // 2) Calculate leftover
-  const baseSum = DAYS * MIN_AMOUNT; // 365 * 5 = 1825
+  // Base sum is 365 * 5 = 1825
+  const baseSum = DAYS * MIN_AMOUNT;
   let leftover = goal - baseSum;
 
-  // If leftover < 0, or leftover is not multiple of 5, or leftover too large -> not feasible
-  // leftover > DAYS * (MAX_AMOUNT - MIN_AMOUNT) = 365 * 95 = 34675
+  // Validate leftover
+  // leftover must be >= 0 and <= 365*(100-5)=34675, and multiple of 5
   if (
     leftover < 0 ||
     leftover % 5 !== 0 ||
@@ -37,58 +28,46 @@ function generateRandomCirclesForYear(goal) {
     return [];
   }
 
-  // 3) Randomly distribute leftover in increments of 5
-  //    until leftover is 0 or we can't place any more increments
+  // Distribute leftover in increments of 5
   while (leftover > 0) {
-    // Pick a random circle index
     const randIdx = Math.floor(Math.random() * DAYS);
 
-    // How much can we still add to that circle?
-    const currentValue = circles[randIdx];
-    const maxPossibleAdd = MAX_AMOUNT - currentValue; // e.g., up to 95 if currentValue=5
+    const currentVal = circles[randIdx];
+    const canAdd = MAX_AMOUNT - currentVal; // how much more we can add to this circle
 
-    // If we can add at least 5, do so
-    if (maxPossibleAdd >= 5) {
-      circles[randIdx] = currentValue + 5; // increment by 5
+    if (canAdd >= 5) {
+      circles[randIdx] = currentVal + 5;
       leftover -= 5;
     }
-
-    // If we can't add to that circle (it's already 100),
-    // we just pick another circle in the next iteration.
-    // The loop ends when leftover = 0 or no circle can accept more increments
-    // (but in theory, we should always find a circle unless leftover is too big or distribution is stuck).
+    // If can't add at least 5, we skip and pick another random circle next loop
   }
 
-  // leftover should be 0 if everything worked
-  if (leftover === 0) {
-    return circles;
-  } else {
-    // Something went wrong (shouldn’t happen if the goal is feasible).
-    return [];
-  }
+  // If leftover ended at 0, success
+  return leftover === 0 ? circles : [];
 }
 
 function App() {
-  // 1) State for the user’s goal (default: 6000).
-  // 2) 365 circle amounts that sum to that goal.
-  // 3) Which circles are currently selected.
-  const [goal, setGoal] = useState(6000);
-  const [circles, setCircles] = useState([]);
-  const [selectedIndices, setSelectedIndices] = useState([]);
+  /**
+   * 1) We keep the user’s goal *input* in a string to avoid leading-zero issues.
+   * 2) We store the numeric data for circles in state once generated.
+   * 3) We also track selected circle indices.
+   */
+  const [goalInput, setGoalInput] = useState("6000");  // text in the input
+  const [circles, setCircles] = useState([]);          // array of circle amounts (365)
+  const [selectedIndices, setSelectedIndices] = useState([]); // which circles are toggled
 
   /**
-   * On first load, restore from localStorage if present:
-   * - goal
-   * - circles
-   * - selected indices
+   * On first mount, load any saved data from localStorage.
    */
   useEffect(() => {
-    const savedGoal = localStorage.getItem("yearGoal");
+    const savedGoal = localStorage.getItem("yearGoal");      // numeric
     const savedCircles = localStorage.getItem("yearCircles");
     const savedSelected = localStorage.getItem("yearSelected");
 
+    // If we have a saved numeric goal, convert it to string for the input
     if (savedGoal) {
-      setGoal(JSON.parse(savedGoal));
+      const parsedGoal = JSON.parse(savedGoal); 
+      setGoalInput(String(parsedGoal));  // show in input
     }
     if (savedCircles) {
       setCircles(JSON.parse(savedCircles));
@@ -99,63 +78,57 @@ function App() {
   }, []);
 
   /**
-   * Let user change the goal (no generation yet).
+   * Input change handler: remove non-digits, strip leading zeros, allow empty.
    */
   const handleGoalChange = (e) => {
-    setGoal(Number(e.target.value) || 0);
+    let val = e.target.value.replace(/\D+/g, ""); // keep only digits
+    val = val.replace(/^0+/, "");                 // remove leading zeros
+    setGoalInput(val);                            // if empty, we set ""
   };
 
   /**
-   * Generate new distribution of 365 circles that sum to the goal.
-   * Clear any previous selections for a fresh start.
+   * Generate new 365-circle distribution for the user’s numeric goal.
+   * Then store them in localStorage, reset selections, etc.
    */
   const handleGenerate = () => {
-    // Quick validity check
-    if (goal < 1825 || goal > 36500 || goal % 5 !== 0) {
-      alert(
-        "Goal must be between 1825 and 36500 and be a multiple of 5 to fill 365 circles."
-      );
+    const parsedGoal = parseInt(goalInput, 10) || 0;
+
+    if (parsedGoal < 1825 || parsedGoal > 36500 || parsedGoal % 5 !== 0) {
+      alert("Goal must be 1825–36500 and a multiple of 5 to fill 365 circles.");
       return;
     }
 
-    const newCircles = generateRandomCirclesForYear(goal);
-
+    const newCircles = generateRandomCirclesForYear(parsedGoal);
     if (newCircles.length === 0) {
-      alert(
-        "Could not generate 365 circles for that goal. Make sure your goal is feasible."
-      );
+      alert("Could not generate 365 circles for that goal (check constraints).");
       return;
     }
 
-    // Update state and localStorage
+    // Update in-state
     setCircles(newCircles);
-    localStorage.setItem("yearCircles", JSON.stringify(newCircles));
-
-    // Clear selections
     setSelectedIndices([]);
-    localStorage.removeItem("yearSelected");
 
-    // Save the new goal
-    localStorage.setItem("yearGoal", JSON.stringify(goal));
+    // Store in localStorage
+    localStorage.setItem("yearGoal", JSON.stringify(parsedGoal));    // numeric
+    localStorage.setItem("yearCircles", JSON.stringify(newCircles));
+    localStorage.removeItem("yearSelected");
   };
 
   /**
-   * Toggle selection of a circle on click.
+   * Toggle circle selection on click.
    */
   const handleCircleClick = (index) => {
     setSelectedIndices((prev) => {
       if (prev.includes(index)) {
-        // remove
-        return prev.filter((item) => item !== index);
+        return prev.filter((i) => i !== index);
       } else {
-        // add
         return [...prev, index];
       }
     });
   };
 
   /**
-   * Whenever selectedIndices changes, persist to localStorage.
+   * Whenever selectedIndices changes, store it in localStorage.
    */
   useEffect(() => {
     localStorage.setItem("yearSelected", JSON.stringify(selectedIndices));
@@ -169,7 +142,7 @@ function App() {
   }, 0);
 
   /**
-   * Reset only the selections (keep the same 365 amounts).
+   * Reset only the selections.
    */
   const handleReset = () => {
     setSelectedIndices([]);
@@ -182,10 +155,11 @@ function App() {
 
       <div className="goal-container">
         <input
-          type="number"
-          value={goal}
+          type="text"
+          value={goalInput}
           onChange={handleGoalChange}
           className="goal-input"
+          placeholder="Enter goal (e.g. 6000)"
         />
         <button onClick={handleGenerate} className="generate-button">
           Generate 365 Circles
@@ -196,11 +170,11 @@ function App() {
         <>
           <div className="circles-container">
             {circles.map((amount, index) => {
-              const selected = selectedIndices.includes(index);
+              const isSelected = selectedIndices.includes(index);
               return (
                 <div
                   key={index}
-                  className={`circle ${selected ? "circle-selected" : ""}`}
+                  className={`circle ${isSelected ? "circle-selected" : ""}`}
                   onClick={() => handleCircleClick(index)}
                 >
                   {amount}
